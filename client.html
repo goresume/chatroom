@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Chat Room</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background-color: #4a90e2;
+            color: white;
+            padding: 15px 20px;
+        }
+
+        .chat-header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: white;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .message.received {
+            background-color: #f1f0f0;
+            margin-right: auto;
+        }
+
+        .message.sent {
+            background-color: #4a90e2;
+            color: white;
+            margin-left: auto;
+        }
+
+        .username {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .message-content {
+            word-wrap: break-word;
+        }
+
+        .message.system {
+            background-color: #f8f9fa;
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            margin: 10px auto;
+            padding: 5px 15px;
+            border-radius: 15px;
+            max-width: 90%;
+        }
+
+        .message.system .username {
+            display: none;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        #login-form {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #357abd;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .status {
+            text-align: center;
+            color: #666;
+            padding: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="chat-header">
+            <h1>Chat Room</h1>
+        </div>
+
+        <div id="login-form">
+            <div class="input-group">
+                <input type="text" id="username" placeholder="Enter your username" />
+                <button onclick="login()">Join Chat</button>
+            </div>
+        </div>
+
+        <div id="chat-container" class="hidden">
+            <div class="chat-messages" id="messages">
+                <div class="status">Connected to chat room</div>
+            </div>
+            <div class="chat-input">
+                <div class="input-group">
+                    <input type="text" id="message-input" placeholder="Type your message..." />
+                    <button onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let username = '';
+
+        function login() {
+            username = document.getElementById('username').value.trim();
+            if (username === '') {
+                alert('Please enter a username');
+                return;
+            }
+
+            // Hide login, show chat
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('chat-container').classList.remove('hidden');
+
+            // Connect to WebSocket server
+            connectWebSocket();
+
+            // Focus on message input
+            document.getElementById('message-input').focus();
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://localhost:8080/ws?username=${encodeURIComponent(username)}`);
+
+            ws.onopen = () => {
+                console.log('Connected to chat server');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                displayMessage(message);
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from chat server');
+                const messages = document.getElementById('messages');
+                messages.innerHTML += '<div class="status">Disconnected from chat room</div>';
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                alert('Error connecting to chat server');
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message && ws) {
+                const messageObj = {
+                    username: username,
+                    content: message
+                };
+                
+                ws.send(JSON.stringify(messageObj));
+                input.value = '';
+            }
+        }
+
+        function displayMessage(message) {
+        const messages = document.getElementById('messages');
+        const messageDiv = document.createElement('div');
+        
+        if (message.type === 'system') {
+            messageDiv.className = 'message system';
+            messageDiv.innerHTML = `
+                <div class="message-content">${escapeHtml(message.content)}</div>
+            `;
+        } else {
+            messageDiv.className = `message ${message.username === username ? 'sent' : 'received'}`;
+            messageDiv.innerHTML = `
+                <div class="username">${escapeHtml(message.username)}</div>
+                <div class="message-content">${escapeHtml(message.content)}</div>
+            `;
+        }
+        
+        messages.appendChild(messageDiv);
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Handle enter key in message input
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Handle enter key in username input
+        document.getElementById('username').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    </script>
+</body>
+</html>
